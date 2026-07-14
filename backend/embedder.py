@@ -27,7 +27,7 @@ _model = SentenceTransformer(EMBEDDING_MODEL)
 # Underscore prefix (_model) is Python convention for
 # "private to this module — don't import this directly"
 
-print(f"✅Embedding model ready\n")
+print(f"Embedding model ready\n")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -192,9 +192,9 @@ if __name__ == "__main__":
     print(f"\nTest 2 — Similarity check:")
     print(f"  'Python programming' vs 'coding in Python': {sim_related:.4f}")
     print(f"  'Python programming' vs 'cooking pasta':    {sim_unrelated:.4f}")
-    print(f"\n  ✅ Related texts should score HIGHER than unrelated")
+    print(f"\n   Related texts should score HIGHER than unrelated")
     print(f"  Result: {sim_related:.4f} > {sim_unrelated:.4f} → "
-          f"{'✅ CORRECT' if sim_related > sim_unrelated else '❌ WRONG'}")
+          f"{' CORRECT' if sim_related > sim_unrelated else '❌ WRONG'}")
 
     # Test 3: Batch embedding
     batch = [
@@ -207,4 +207,4 @@ if __name__ == "__main__":
     print(f"\nTest 3 — Batch embed:")
     print(f"  Input: {len(batch)} texts")
     print(f"  Output: {len(vectors)} vectors × {len(vectors[0])} dims")
-    print(f"  ✅ Batch embedding works!")
+    print(f"   Batch embedding works!")

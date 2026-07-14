@@ -39,7 +39,7 @@ def load_pdf(file_path: str) -> str:
 
     full_text = ""
     total_pages = len(reader.pages)
-    print(f"   📖 Found {total_pages} page(s)")
+    print(f"    Found {total_pages} page(s)")
 
     for page_num, page in enumerate(reader.pages):
         page_text = page.extract_text()
@@ -51,7 +51,7 @@ def load_pdf(file_path: str) -> str:
             # This page is probably a scanned image
             # PyPDF can't extract text from images
             # Solution (advanced): add OCR with pytesseract
-            print(f"   ⚠️  Page {page_num + 1} has no extractable text "
+            print(f"    Page {page_num + 1} has no extractable text "
                   f"(might be a scanned image)")
 
     return full_text
@@ -287,21 +287,21 @@ def ingest_document(file_path: str) -> dict:
     load_pdf → clean_text → chunk_text → store_chunks_with_embeddings
     """
     print(f"\n{'='*50}")
-    print(f"📄 INGESTING: {os.path.basename(file_path)}")
+    print(f" INGESTING: {os.path.basename(file_path)}")
     print(f"{'='*50}")
 
     # Step 1: Extract
     raw_text = load_pdf(file_path)
-    print(f"   ✅ Extracted {len(raw_text):,} characters")
+    print(f"    Extracted {len(raw_text):,} characters")
 
     # Step 2: Clean
     clean = clean_text(raw_text)
     reduction = len(raw_text) - len(clean)
-    print(f"   ✅ Cleaned text (removed {reduction} noisy characters)")
+    print(f"    Cleaned text (removed {reduction} noisy characters)")
 
     # Step 3: Chunk
     chunks = chunk_text(clean, file_path)
-    print(f"   ✅ Created {len(chunks)} chunks "
+    print(f"    Created {len(chunks)} chunks "
           f"({CHUNK_SIZE} chars, {CHUNK_OVERLAP} overlap)")
 
     # Show chunk preview
@@ -312,7 +312,7 @@ def ingest_document(file_path: str) -> dict:
     # Step 4: Embed + Store
     stored = store_chunks_with_embeddings(chunks)
 
-    print(f"\n✅ INGESTION COMPLETE!")
+    print(f"\n INGESTION COMPLETE!")
     print(f"   File:   {os.path.basename(file_path)}")
     print(f"   Chunks: {stored} stored in ChromaDB")
     print(f"{'='*50}\n")

@@ -5,50 +5,46 @@ import shutil
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional
 from ingest import ingest_document
 from retriever import retrieve_with_threshold, format_context
 from generator import rag_query
-from config import UPLOAD_DIR
-from typing import Optional
+from config import UPLOAD_DIR, VECTORSTORE_PATH, COLLECTION_NAME
+import chromadb
 
-app = FastAPI(
-    title="PaperBrain API",
-    description="Upload documents, ask questions, get cited answers",
-    version="1.0.0"
-)
+app = FastAPI(title="PaperBrain API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # allows index.html opened directly in browser
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ── ENDPOINT 1: Health check ──────────────────────────────────────────
-
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "app": "PaperBrain",
-        "message": "RAG pipeline is ready"
-    }
+    return {"status": "ok", "app": "PaperBrain", "message": "RAG pipeline is ready"}
 
 
-# ── ENDPOINT 2: Upload PDF ────────────────────────────────────────────
+def delete_chunks_for_file(filename: str):
+    """Delete all ChromaDB chunks for a given filename."""
+    try:
+        client     = chromadb.PersistentClient(path=VECTORSTORE_PATH)
+        collection = client.get_collection(name=COLLECTION_NAME)
+        existing   = collection.get(where={"source": filename})
+        if existing and existing["ids"]:
+            collection.delete(ids=existing["ids"])
+            print(f"Deleted {len(existing['ids'])} chunks for: {filename}")
+    except Exception as e:
+        print(f"Nothing to delete for {filename}: {e}")
+
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
-    """
-    Upload PDF → extract → chunk → embed → store in ChromaDB.
-    """
     if not file.filename.endswith(".pdf"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Only PDF files supported. Got: {file.filename}"
-        )
+        raise HTTPException(status_code=400, detail="Only PDF files supported.")
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -57,6 +53,7 @@ async def upload_document(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     try:
+        delete_chunks_for_file(file.filename)  # remove stale data first
         result = ingest_document(file_path)
         return {
             "message": f"Successfully ingested {file.filename}",
@@ -66,35 +63,24 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── ENDPOINT 3: Search only (no LLM) ─────────────────────────────────
-
-class SearchRequest(BaseModel):
-    query: str
-    top_k: int = 5
-
-
-@app.post("/search")
-def search_documents(request: SearchRequest):
+@app.delete("/document/{filename}")
+def delete_document(filename: str):
     """
-    Retrieve relevant chunks without calling LLaMA3.
-    Use this to debug retrieval quality independently.
+    Delete a document:
+    1. Remove all its chunks from ChromaDB
+    2. Delete the PDF file from disk
     """
-    chunks = retrieve_with_threshold(
-        query=request.query,
-        top_k=request.top_k
-    )
+    # 1. Remove from ChromaDB
+    delete_chunks_for_file(filename)
 
-    return {
-        "query":             request.query,
-        "chunks_found":      len(chunks),
-        "results":           chunks,
-        "formatted_context": format_context(chunks)
-    }
+    # 2. Remove PDF from disk
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        print(f"Deleted file from disk: {filename}")
 
+    return {"message": f"{filename} deleted successfully"}
 
-# ── ENDPOINT 4: Full RAG query ────────────────────────────────────────
-
-from typing import Optional
 
 class QueryRequest(BaseModel):
     question: str
@@ -103,41 +89,18 @@ class QueryRequest(BaseModel):
 
 @app.post("/query")
 def query_documents(request: QueryRequest):
-    """
-    Full RAG pipeline:
-    question → retrieve chunks → LLaMA3 → cited answer
-
-    This is the main endpoint the frontend calls.
-
-    Response shape:
-    {
-        "question":    "What projects did Dhiraj build?",
-        "answer":      "Dhiraj built... [Source: Resume.pdf, Page 1]",
-        "sources":     [{"file": "Resume.pdf", "page": "1", "similarity": 0.87}],
-        "chunks_used": 5,
-        "model":       "llama3-8b-8192"
-    }
-    """
     if not request.question.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Question cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    print(f"\nQUERY: {request.question}")
+    print(f"FILTER: {request.document_name or 'ALL documents'}")
 
     try:
-        result = rag_query(
-    request.question,
-    document_name=request.document_name
-)
-        return {
-            "question": request.question,
-            **result
-        }
+        result = rag_query(request.question, document_name=request.document_name)
+        return {"question": request.question, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# ── Run server ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import uvicorn

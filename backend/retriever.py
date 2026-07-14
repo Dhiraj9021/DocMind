@@ -52,11 +52,11 @@ def retrieve(
     try:
         collection = get_collection()
     except Exception:
-        print("❌ No collection found. Upload a document first.")
+        print("No collection found. Upload a document first.")
         return []
 
     if collection.count() == 0:
-        print("❌ Collection is empty. Upload a document first.")
+        print("Collection is empty. Upload a document first.")
         return []
 
     # Step 1: Embed the user's question
@@ -147,7 +147,7 @@ def retrieve_with_threshold(
 
     With threshold (0.3):
       Same scenario → all chunks score < 0.3 → filtered out
-      Empty list returned → LLaMA says "I don't know" → honest ✅
+      Empty list returned → LLaMA says "I don't know" → honest 
 
     How to choose threshold:
       0.2 = very lenient (returns more, some irrelevant)
@@ -164,7 +164,7 @@ def retrieve_with_threshold(
 
     removed = len(chunks) - len(filtered)
     if removed > 0:
-        print(f"   🔽 Filtered out {removed} low-relevance chunks "
+        print(f"   Filtered out {removed} low-relevance chunks "
               f"(below {min_similarity} threshold)")
 
     return filtered
@@ -218,7 +218,7 @@ if __name__ == "__main__":
         else "Python programming skills"
 
     print(f"\n{'='*50}")
-    print(f"🔍 SEMANTIC SEARCH TEST")
+    print(f" SEMANTIC SEARCH TEST")
     print(f"{'='*50}")
     print(f"Query: '{query}'\n")
 

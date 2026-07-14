@@ -1,126 +1,91 @@
 // src/components/UploadZone.jsx
 
-import { useState, useCallback } from "react";
-import { useDropzone } from "react-dropzone";
+import { useState, useRef } from "react";
 import axios from "axios";
-import { Upload, FileText, CheckCircle, Loader } from "lucide-react";
+
+const API = "http://localhost:8000";
 
 export default function UploadZone({ onUploadSuccess }) {
-  const [status, setStatus]   = useState("idle"); // idle | uploading | done | error
-  const [message, setMessage] = useState("");
-  const [files, setFiles]     = useState([]);
+  const [status,    setStatus]    = useState(""); // loading / ok / error message
+  const [isDragging, setIsDragging] = useState(false);
+  const inputRef = useRef();
 
-  const onDrop = useCallback(async (acceptedFiles) => {
-    const pdfFiles = acceptedFiles.filter(f => f.name.endsWith(".pdf"));
-
-    if (pdfFiles.length === 0) {
-      setStatus("error");
-      setMessage("Please upload PDF files only.");
+  const uploadFiles = async (files) => {
+    const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
+    if (!pdfs.length) {
+      setStatus(" Please select PDF files only.");
       return;
     }
 
-    setStatus("uploading");
-    setFiles(pdfFiles.map(f => f.name));
+    setStatus("Uploading...");
+    const uploadedNames = [];
 
-    let successCount = 0;
-
-    for (const file of pdfFiles) {
+    for (const file of pdfs) {
       try {
-        const formData = new FormData();
-        formData.append("file", file);
+        const fd = new FormData();
+        fd.append("file", file);
 
-        await axios.post("http://localhost:8000/upload", formData, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
+        const { data } = await axios.post(`${API}/upload`, fd);
 
-        successCount++;
+        // Backend returns: { message, details: { file, chunks_created, characters } }
+        const name = data.details?.file || file.name;
+        uploadedNames.push(name);
+
       } catch (err) {
-        console.error(`Failed to upload ${file.name}:`, err);
+        console.error("Upload error:", err);
+        setStatus(`❌ Failed to upload ${file.name}`);
+        return;
       }
     }
 
-    if (successCount === pdfFiles.length) {
-      setStatus("done");
-      setMessage(`${successCount} file(s) uploaded and indexed successfully!`);
-      onUploadSuccess(pdfFiles.map(f => f.name));
-    } else {
-      setStatus("error");
-      setMessage(`${successCount}/${pdfFiles.length} files uploaded.`);
-    }
-  }, [onUploadSuccess]);
+    setStatus(`✅ ${uploadedNames.length} file(s) uploaded and indexed successfully!`);
+    onUploadSuccess(uploadedNames); // pass filenames up to App.jsx
+    if (inputRef.current) inputRef.current.value = "";
+  };
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { "application/pdf": [".pdf"] },
-    multiple: true
-  });
+  const onDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    uploadFiles(e.dataTransfer.files);
+  };
 
   return (
-    <div style={{ padding: "16px" }}>
+    <div style={{ padding: "16px", borderBottom: "1px solid #1f1f1f" }}>
 
       {/* Drop zone */}
       <div
-        {...getRootProps()}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={onDrop}
         style={{
-          border: `2px dashed ${isDragActive ? "#6366f1" : "#333"}`,
-          borderRadius: "12px",
-          padding: "28px 20px",
-          textAlign: "center",
-          cursor: "pointer",
-          background: isDragActive ? "#1e1b4b" : "#1a1a1a",
-          transition: "all 0.2s"
+          border:       `1.5px dashed ${isDragging ? "#6366f1" : "#2a2a2a"}`,
+          borderRadius: "8px",
+          padding:      "20px 12px",
+          textAlign:    "center",
+          cursor:       "pointer",
+          background:   isDragging ? "#12122a" : "#111",
+          transition:   "all 0.2s",
         }}
       >
-        <input {...getInputProps()} />
-        <Upload size={28} color={isDragActive ? "#6366f1" : "#555"}
-          style={{ margin: "0 auto 10px" }} />
-        <p style={{ color: "#aaa", fontSize: "13px" }}>
-          {isDragActive
-            ? "Drop your PDFs here..."
-            : "Drag & drop PDFs or click to browse"}
-        </p>
+        <div style={{ fontSize: "22px", marginBottom: "6px" }}>📂</div>
+        <div style={{ fontSize: "12px", color: "#555" }}>
+          Drag & drop PDFs or <span style={{ color: "#6366f1", textDecoration: "underline" }}>click to browse</span>
+        </div>
       </div>
 
-      {/* Status message */}
-      {status === "uploading" && (
-        <div style={{ display: "flex", alignItems: "center",
-          gap: "8px", marginTop: "12px", color: "#6366f1" }}>
-          <Loader size={14} className="spin" />
-          <span style={{ fontSize: "13px" }}>
-            Indexing {files.join(", ")}...
-          </span>
-        </div>
-      )}
+      {/* Hidden file input */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf"
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => uploadFiles(e.target.files)}
+      />
 
-      {status === "done" && (
-        <div style={{ display: "flex", alignItems: "center",
-          gap: "8px", marginTop: "12px", color: "#22c55e" }}>
-          <CheckCircle size={14} />
-          <span style={{ fontSize: "13px" }}>{message}</span>
-        </div>
-      )}
+ 
 
-      {status === "error" && (
-        <p style={{ color: "#ef4444", fontSize: "13px", marginTop: "12px" }}>
-          {message}
-        </p>
-      )}
-
-      {/* Uploaded files list */}
-      {files.length > 0 && status === "done" && (
-        <div style={{ marginTop: "12px" }}>
-          {files.map((name, i) => (
-            <div key={i} style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              padding: "6px 10px", background: "#1a1a1a",
-              borderRadius: "8px", marginBottom: "4px"
-            }}>
-              <FileText size={13} color="#6366f1" />
-              <span style={{ fontSize: "12px", color: "#aaa" }}>{name}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
